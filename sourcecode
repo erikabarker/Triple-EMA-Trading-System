@@ -1,0 +1,70 @@
+//@version=5
+indicator("Enhanced THMA Daily Optimizer", overlay=true)
+
+// Inputs - Optimized for daily charts
+src = input(close, title="Source")
+length = input.int(55, title="Length", minval=1, maxval=200)
+showBand = input(true, title="Show as a Band?")
+colorTrend = input(true, title="Color THMA according to trend?")
+bandWidth = input.float(1.5, title="Band Width Multiplier", minval=0.1, maxval=3, step=0.1)
+showSignals = input(true, title="Show Buy/Sell Signals")
+highlighting = input(true, title="Highlight Trend")
+arrowOffset = input.float(0.75, title="Arrow Offset Multiplier", minval=0.1, maxval=2, step=0.1)
+
+// Filter inputs - Simplified for better signal generation
+useRSIFilter = input(true, title="Use RSI Filter")
+rsiLength = input.int(14, title="RSI Length")
+rsiOverbought = input.int(70, title="RSI Overbought", minval=50, maxval=100)
+rsiOversold = input.int(30, title="RSI Oversold", minval=0, maxval=50)
+
+// Enhanced THMA Function using EMAs with more weight on recent prices
+THMA_Enhanced(src, len) =>
+    ema1 = ta.ema(src, math.round(len/4))
+    ema2 = ta.ema(src, math.round(len/2))
+    ema3 = ta.ema(src, len)
+    (ema1 * 0.45 + ema2 * 0.35 + ema3 * 0.20)
+
+// Calculate Enhanced THMA
+thma = THMA_Enhanced(src, length)
+thma_prev = THMA_Enhanced(src, length)[1]
+
+// Basic indicators
+rsi = ta.rsi(src, rsiLength)
+atr = ta.atr(21)
+
+// Simple trend determination
+trend = thma > thma_prev ? 1 : -1
+
+// Color logic
+thmaColor = trend == 1 ? color.green : color.red
+
+// Plotting
+mainLine = plot(thma, title="THMA", color=thmaColor, linewidth=2)
+upper = plot(showBand ? thma + (atr * bandWidth) : na, title="Upper Band", color=color.new(thmaColor, 70))
+lower = plot(showBand ? thma - (atr * bandWidth) : na, title="Lower Band", color=color.new(thmaColor, 70))
+fill(upper, lower, color=color.new(thmaColor, 90))
+
+// Simplified Buy and Sell Signals for Daily Charts
+buySignal = trend == 1 and trend[1] == -1 and (not useRSIFilter or rsi < rsiOverbought)
+sellSignal = trend == -1 and trend[1] == 1 and (not useRSIFilter or rsi > rsiOversold)
+
+// Calculate offset for arrows
+buyOffset = low - (atr * arrowOffset)
+sellOffset = high + (atr * arrowOffset)
+
+// Plot arrows with offset
+plotshape(buySignal and showSignals ? buyOffset : na, title="Buy Signal", location=location.absolute, style=shape.triangleup, size=size.small, color=color.green)
+plotshape(sellSignal and showSignals ? sellOffset : na, title="Sell Signal", location=location.absolute, style=shape.triangledown, size=size.small, color=color.red)
+
+// Enhanced Trend Highlighting
+mPlot = plot(ohlc4, title="", style=plot.style_circles, linewidth=1)
+longFillColor = highlighting ? (trend == 1 ? color.new(color.green, 90) : color.new(color.white, 100)) : color.new(color.white, 100)
+shortFillColor = highlighting ? (trend == -1 ? color.new(color.red, 90) : color.new(color.white, 100)) : color.new(color.white, 100)
+fill(mPlot, mainLine, title="UpTrend Highlighter", color=longFillColor)
+fill(mPlot, mainLine, title="DownTrend Highlighter", color=shortFillColor)
+
+// Alerts
+alertcondition(buySignal, title="Enhanced THMA Buy", message="THMA Daily Buy Signal!")
+alertcondition(sellSignal, title="Enhanced THMA Sell", message="THMA Daily Sell Signal!")
+changeCond = trend != trend[1]
+alertcondition(changeCond, title="THMA Direction Change", message="THMA has changed direction!")
